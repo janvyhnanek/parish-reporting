@@ -111,5 +111,5 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 });
 
 app.listen(appConfig.port, () => {
-  console.log(`Parish Reporting API listening on http://127.0.0.1:${appConfig.port}`);
+  console.log(`Vizitátor API listening on http://127.0.0.1:${appConfig.port}`);
 });

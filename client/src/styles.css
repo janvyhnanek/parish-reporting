@@ -311,6 +311,29 @@ input {
   gap: 0.7rem;
 }
 
+.status-rule-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-bottom: 0.85rem;
+}
+
+.status-rule-chip {
+  display: inline-grid;
+  gap: 0.1rem;
+  min-width: 130px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(15, 23, 42, 0.16);
+  border-radius: 8px;
+  font-weight: 800;
+}
+
+.status-rule-chip small {
+  font-size: 0.72rem;
+  font-weight: 700;
+  opacity: 0.82;
+}
+
 .field-card {
   display: grid;
   gap: 0.25rem;

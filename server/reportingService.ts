@@ -15,7 +15,7 @@ export const dashboard: DashboardDefinition = {
   description: "Metadata-driven dashboard nad listem Úkolovník Arcibiskupství pražského.",
   entityId: "tasks",
   defaultDimension: "gestor_vedouci_oddeleni_nebo_odboru",
-  defaultSegment: "stav_plneni",
+  defaultSegment: "stav_ukolu",
   defaultVisibleFields: [
     "field",
     "projekt",
@@ -24,7 +24,7 @@ export const dashboard: DashboardDefinition = {
     "odpovedna_osoba_referent",
     "termin_pro_splneni",
     "datum_splneni",
-    "stav_plneni",
+    "stav_ukolu",
     "poznamky",
   ],
 };
@@ -55,15 +55,6 @@ function filteredRecords(records: DataRecord[], filters?: FilterState): DataReco
   return records.filter((record) => matchesFilters(record, filters));
 }
 
-function formatSegmentLabel(value: string): string {
-  if (!value || value === "Nevyplněno") return "Nevyplněno";
-  const numeric = Number(value);
-  if (Number.isNaN(numeric)) return value;
-  if (numeric < 0) return `Po termínu (${Math.abs(numeric)} dní)`;
-  if (numeric === 0) return "Dnes";
-  return `${numeric} dní zbývá`;
-}
-
 export async function getMetadata(force = false): Promise<MetadataCatalog> {
   return (await loadSheet(force)).catalog;
 }
@@ -74,7 +65,7 @@ export async function getRecords(filters?: FilterState): Promise<DataRecord[]> {
 }
 
 export async function aggregate(request: AggregationRequest): Promise<AggregationResult> {
-  const { records } = await loadSheet();
+  const { catalog, records } = await loadSheet();
   const filtered = filteredRecords(records, request.filters);
   const groups = new Map<string, Map<string, DataRecord[]>>();
 
@@ -87,8 +78,19 @@ export async function aggregate(request: AggregationRequest): Promise<Aggregatio
     segments.get(segmentKey)!.push(record);
   });
 
-  const segmentLabels = [...new Set(filtered.map((record) => valueText(record.values[request.segmentFieldId]) || "Nevyplněno"))]
-    .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b, "cs"));
+  const discoveredSegmentLabels = [...new Set(filtered.map((record) => valueText(record.values[request.segmentFieldId]) || "Nevyplněno"))];
+  const configuredStatusLabels = request.segmentFieldId === "stav_ukolu" ? catalog.statusRules.map((rule) => rule.label) : [];
+  const segmentLabels = [
+    ...configuredStatusLabels.filter((label) => discoveredSegmentLabels.includes(label)),
+    ...discoveredSegmentLabels
+      .filter((label) => !configuredStatusLabels.includes(label))
+      .sort((a, b) => Number(a) - Number(b) || a.localeCompare(b, "cs")),
+  ];
+  const segmentColors = Object.fromEntries(
+    request.segmentFieldId === "stav_ukolu"
+      ? catalog.statusRules.map((rule) => [rule.label, rule.color])
+      : [],
+  );
 
   const resultGroups = [...groups.entries()]
     .map(([key, segments]) => ({
@@ -99,9 +101,10 @@ export async function aggregate(request: AggregationRequest): Promise<Aggregatio
         const items = segments.get(segmentKey) || [];
         return {
           key: segmentKey,
-          label: formatSegmentLabel(segmentKey),
+          label: segmentKey,
           count: items.length,
           recordIds: items.map((record) => record.id),
+          color: segmentColors[segmentKey],
         };
       }),
     }))
@@ -113,6 +116,7 @@ export async function aggregate(request: AggregationRequest): Promise<Aggregatio
     segmentFieldId: request.segmentFieldId,
     groups: resultGroups,
     segmentLabels,
+    segmentColors,
     totalRecords: records.length,
     filteredRecords: filtered.length,
     diagnostics: resultGroups.length > 30 ? ["Výsledek je omezen na 30 největších skupin."] : [],

@@ -1,6 +1,7 @@
 import { parse } from "csv-parse/sync";
-import type { DataRecord, FieldMetadata, MetadataCatalog, RecordValue, SemanticType } from "../shared/types";
+import type { DataRecord, FieldMetadata, MetadataCatalog, RecordValue, SemanticType, StatusRule } from "../shared/types";
 import { appConfig } from "./config";
+import { classifyTaskStatus, loadStatusRules } from "./statusRules";
 
 interface LoadedSheet {
   catalog: MetadataCatalog;
@@ -92,13 +93,16 @@ function parseDate(value: string): string | null {
 function normalizeValue(value: string, type: FieldMetadata["type"]): RecordValue {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (type === "number") return Number(trimmed.replace(",", "."));
+  if (type === "number") {
+    const numeric = Number(trimmed.replace(",", "."));
+    return Number.isNaN(numeric) ? trimmed : numeric;
+  }
   if (type === "date") return parseDate(trimmed) || trimmed;
   return trimmed;
 }
 
-function buildCatalog(headers: string[], ids: string[], rows: string[][], loadedAt: string): MetadataCatalog {
-  const fields = headers.map((header, index) => {
+function buildCatalog(headers: string[], ids: string[], rows: string[][], loadedAt: string, statusRules: StatusRule[]): MetadataCatalog {
+  const discoveredFields = headers.map((header, index) => {
     const values = rows.map((row) => row[index]?.trim() || "").filter(Boolean);
     const distinct = [...new Set(values)];
     const type = inferType(values);
@@ -119,6 +123,23 @@ function buildCatalog(headers: string[], ids: string[], rows: string[][], loaded
     } satisfies FieldMetadata;
   });
 
+  const fields = [
+    ...discoveredFields,
+    {
+      id: "stav_ukolu",
+      sourceName: "Stav úkolu",
+      label: "Stav úkolu",
+      type: "string",
+      semanticType: "status",
+      visible: true,
+      filterable: true,
+      dimension: true,
+      completeness: rows.length ? rows.filter((row) => row.some((cell) => cell.trim())).length / rows.length : 0,
+      distinctCount: statusRules.length,
+      sampleValues: statusRules.map((rule) => rule.label),
+    } satisfies FieldMetadata,
+  ];
+
   const primaryKey = ids[headers.findIndex((header) => header.trim() === "#")] || ids[0];
   return {
     source: {
@@ -137,6 +158,7 @@ function buildCatalog(headers: string[], ids: string[], rows: string[][], loaded
       primaryKey,
       fields,
     },
+    statusRules,
   };
 }
 
@@ -152,17 +174,20 @@ async function fetchCsv(): Promise<string> {
 export async function loadSheet(force = false): Promise<LoadedSheet> {
   if (!force && cache && Date.now() - cache.loadedAt < appConfig.cacheMs) return cache.value;
 
-  const csv = await fetchCsv();
+  const [csv, statusRules] = await Promise.all([fetchCsv(), loadStatusRules()]);
   const rows = parse(csv, { bom: true, relax_column_count: true }) as string[][];
   const { headers, dataRows } = normalizeRows(rows);
   const ids = uniqueIds(headers);
   const loadedAt = new Date().toISOString();
-  const catalog = buildCatalog(headers, ids, dataRows, loadedAt);
+  const catalog = buildCatalog(headers, ids, dataRows, loadedAt, statusRules);
   const fieldTypes = Object.fromEntries(catalog.entity.fields.map((field) => [field.id, field.type]));
   const primaryKey = catalog.entity.primaryKey;
   const records = dataRows.map((row, index) => {
     const values = Object.fromEntries(ids.map((id, cellIndex) => [id, normalizeValue(row[cellIndex] || "", fieldTypes[id])]));
     const raw = Object.fromEntries(ids.map((id, cellIndex) => [id, row[cellIndex]?.trim() || ""]));
+    const statusRule = classifyTaskStatus(raw.stav_plneni, statusRules);
+    values.stav_ukolu = statusRule.label;
+    raw.stav_ukolu = statusRule.label;
     return {
       id: String(values[primaryKey] || raw[primaryKey] || index + 1),
       values,

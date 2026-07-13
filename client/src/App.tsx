@@ -1,7 +1,7 @@
 import ReactECharts from "echarts-for-react";
 import { Download, RefreshCw, Search, Settings2, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { AggregationGroup, AggregationResult, DashboardDefinition, DataRecord, FieldMetadata, FilterState, MetadataCatalog } from "../../shared/types";
+import type { AggregationResult, DashboardDefinition, DataRecord, FieldMetadata, FilterState, MetadataCatalog } from "../../shared/types";
 import { downloadCsv, fetchAggregation, fetchDashboards, fetchDetails, fetchMetadata, refreshMetadata } from "./api";
 
 const colorPalette = ["#2563eb", "#dc2626", "#f59e0b", "#16a34a", "#7c3aed", "#0891b2", "#be123c", "#4b5563"];
@@ -76,7 +76,7 @@ export function App() {
   const chartOption = useMemo(() => {
     if (!aggregation) return {};
     return {
-      color: colorPalette,
+      color: aggregation.segmentLabels.map((segmentKey, index) => aggregation.segmentColors[segmentKey] || colorPalette[index % colorPalette.length]),
       tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
       legend: { type: "scroll", top: 0, textStyle: { color: "#334155" } },
       grid: { top: 54, left: 42, right: 24, bottom: 96 },
@@ -91,6 +91,7 @@ export function App() {
         type: "bar",
         stack: "records",
         emphasis: { focus: "series" },
+        itemStyle: { color: aggregation.segmentColors[segmentKey] },
         data: aggregation.groups.map((group) => {
           const segmentItem = group.segments.find((item) => item.key === segmentKey);
           return { value: segmentItem?.count || 0, recordIds: segmentItem?.recordIds || [], groupLabel: group.label };
@@ -121,9 +122,9 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">PR</span>
+          <span className="brand-mark">V</span>
           <div>
-            <strong>Parish Reporting</strong>
+            <strong>Vizitátor</strong>
             <small>{metadata.source.name}</small>
           </div>
         </div>
@@ -229,6 +230,18 @@ export function App() {
               <h2>Datový katalog</h2>
               <p>Automaticky odvozená metadata z listu {metadata.source.worksheetName}.</p>
             </div>
+          </div>
+          <div className="status-rule-list" aria-label="Pravidla stavů úkolů">
+            {metadata.statusRules.map((rule) => (
+              <span
+                key={rule.id}
+                className="status-rule-chip"
+                style={{ backgroundColor: rule.color, color: rule.textColor }}
+              >
+                {rule.label}
+                <small>{rule.completed ? "splněno" : `${rule.from ?? "−∞"} až ${rule.to ?? "+∞"}`}</small>
+              </span>
+            ))}
           </div>
           <div className="field-grid">
             {fields.map((field) => (

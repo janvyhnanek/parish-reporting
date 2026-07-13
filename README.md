@@ -1,4 +1,4 @@
-# Parish Reporting
+# Vizitátor
 
 Metadata-driven reporting platform for configurable dashboards over heterogeneous data sources.
 
@@ -20,7 +20,7 @@ The frontend runs on `http://localhost:5173` and proxies `/api` to the backend o
 - Google Sheets CSV connector for the provided spreadsheet/gid
 - automatic header discovery and field metadata inference
 - REST endpoints for metadata, dashboards, records, aggregations, details, CSV export, and metadata refresh
-- React/Vite dashboard with filters, dimension and segment selectors, stacked bar chart, drill-down details, metadata catalog, and CSV export
+- React/Vite dashboard with filters, dimension and segment selectors, stacked bar chart, drill-down details, metadata catalog, status colors from the `Editace` worksheet, and CSV export
 
 ## Documentation
 

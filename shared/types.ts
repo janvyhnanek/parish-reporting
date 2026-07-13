@@ -24,6 +24,16 @@ export interface FieldMetadata {
   sampleValues: string[];
 }
 
+export interface StatusRule {
+  id: string;
+  label: string;
+  from: number | null;
+  to: number | null;
+  color: string;
+  textColor: string;
+  completed: boolean;
+}
+
 export interface DataSourceMetadata {
   id: string;
   name: string;
@@ -43,6 +53,7 @@ export interface MetadataCatalog {
     primaryKey: string;
     fields: FieldMetadata[];
   };
+  statusRules: StatusRule[];
 }
 
 export type RecordValue = string | number | null;
@@ -80,6 +91,7 @@ export interface AggregationSegment {
   label: string;
   count: number;
   recordIds: string[];
+  color?: string;
 }
 
 export interface AggregationGroup {
@@ -94,6 +106,7 @@ export interface AggregationResult {
   segmentFieldId: string;
   groups: AggregationGroup[];
   segmentLabels: string[];
+  segmentColors: Record<string, string>;
   totalRecords: number;
   filteredRecords: number;
   diagnostics: string[];
