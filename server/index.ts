@@ -1,9 +1,13 @@
 import express from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { appConfig } from "./config";
 import { aggregate, dashboard, details, exportCsv, getMetadata, getRecords } from "./reportingService";
 
 const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const clientDistPath = path.resolve(__dirname, "../dist/client");
 app.use(express.json({ limit: "1mb" }));
 
 const filtersSchema = z.object({
@@ -103,6 +107,15 @@ app.post("/api/exports/csv", async (request, response, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.use(express.static(clientDistPath));
+app.use((request, response, next) => {
+  if (request.method !== "GET" || request.path.startsWith("/api/")) {
+    next();
+    return;
+  }
+  response.sendFile(path.join(clientDistPath, "index.html"));
 });
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
