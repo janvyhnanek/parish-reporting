@@ -52,10 +52,12 @@ function normalizeRows(rows: string[][]): { headers: string[]; dataRows: string[
   const rawHeaders = trimEmptyEdges(rows[headerIndex] || []);
   const firstHeaderColumn = rows[headerIndex]?.findIndex((cell) => cell.trim() === rawHeaders[0]) ?? 0;
   const headers = rawHeaders.map((header, index) => header.trim() || `Sloupec ${index + 1}`);
+  const taskColumnIndex = headers.findIndex((header) => slugify(header) === "ukol");
   const dataRows = rows
     .slice(headerIndex + 1)
     .map((row) => row.slice(firstHeaderColumn, firstHeaderColumn + headers.length))
-    .filter((row) => row.some((cell) => cell?.trim()));
+    .filter((row) => row.some((cell) => cell?.trim()))
+    .filter((row) => taskColumnIndex < 0 || Boolean(row[taskColumnIndex]?.trim()));
   return { headers, dataRows };
 }
 
