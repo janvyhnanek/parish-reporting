@@ -1,6 +1,6 @@
 import ReactECharts from "echarts-for-react";
 import { Download, RefreshCw, Search, Settings2, Table2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AggregationResult, DashboardDefinition, DataRecord, FieldMetadata, FilterState, MetadataCatalog } from "../../shared/types";
 import { downloadCsv, fetchAggregation, fetchDashboards, fetchDetails, fetchMetadata, refreshMetadata } from "./api";
 
@@ -47,6 +47,7 @@ export function App() {
   const [selectedTitle, setSelectedTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [aggregationError, setAggregationError] = useState<string | null>(null);
+  const aggregationRequestId = useRef(0);
 
   const fields = metadata?.entity.fields || [];
   const visibleFields = fields.filter((field) => field.visible);
@@ -65,12 +66,21 @@ export function App() {
 
   useEffect(() => {
     if (!metadata || !dimension || !segment) return;
+    const requestId = aggregationRequestId.current + 1;
+    aggregationRequestId.current = requestId;
+    setAggregation(null);
     setBusy(true);
     setAggregationError(null);
     fetchAggregation({ entityId: metadata.entity.id, dimensionFieldId: dimension, segmentFieldId: segment, filters })
-      .then(setAggregation)
-      .catch((err: Error) => setAggregationError(err.message))
-      .finally(() => setBusy(false));
+      .then((result) => {
+        if (aggregationRequestId.current === requestId) setAggregation(result);
+      })
+      .catch((err: Error) => {
+        if (aggregationRequestId.current === requestId) setAggregationError(err.message);
+      })
+      .finally(() => {
+        if (aggregationRequestId.current === requestId) setBusy(false);
+      });
   }, [metadata, dimension, segment, filters]);
 
   const chartOption = useMemo(() => {
@@ -213,8 +223,10 @@ export function App() {
             {busy ? <span className="sync">Synchronizuji…</span> : null}
           </div>
           <ReactECharts
+            key={`${dimension}:${segment}`}
             className="chart"
             option={chartOption}
+            notMerge
             onEvents={{
               click: (params: { data?: { recordIds?: string[]; groupLabel?: string }; seriesName?: string }) => {
                 const ids = params.data?.recordIds || [];
