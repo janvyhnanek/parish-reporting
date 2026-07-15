@@ -257,7 +257,7 @@ export function App() {
           <div className="realm-label realm-label-bottom"><Flame size={18} />Peklo: nejvíce zpožděných úkolů</div>
           <div className="section-heading">
             <div>
-              <h2>Žebříček gestorů podle zpožděných úkolů</h2>
+              <h2>Kniha hříchů</h2>
               <p>Nahoře jsou gestoři s nejméně úkoly po termínu. Při shodě je výše ten, kdo má více přidělených úkolů celkem.</p>
             </div>
           </div>
