@@ -3,6 +3,11 @@ import { XMLParser } from "fast-xml-parser";
 import type { StatusRule } from "../shared/types";
 import { appConfig } from "./config";
 
+interface EditaceConfig {
+  statusRules: StatusRule[];
+  stewards: string[];
+}
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
@@ -46,7 +51,7 @@ function collectText(node: unknown): string {
   if (typeof node === "object") {
     const record = node as Record<string, unknown>;
     return Object.entries(record)
-      .filter(([key]) => !["r", "t", "s", "xml:space"].includes(key))
+      .filter(([key]) => !["r", "s", "xml:space"].includes(key))
       .map(([, value]) => collectText(value))
       .join("");
   }
@@ -122,7 +127,28 @@ export function classifyTaskStatus(value: unknown, rules: StatusRule[]): StatusR
   return rules.find((rule) => !rule.completed && rule.from === null) || fallbackRules[0];
 }
 
-export async function loadStatusRules(): Promise<StatusRule[]> {
+function parseStewards(rows: Record<number, { value: string }>[]): string[] {
+  const headerRowIndex = rows.findIndex((row) => Object.values(row).some((cell) => (
+    cell.value.toLocaleLowerCase("cs-CZ").includes("sloupec")
+    && cell.value.toLocaleLowerCase("cs-CZ").includes("gestor")
+  )));
+  if (headerRowIndex < 0) return [];
+
+  const headerRow = rows[headerRowIndex];
+  const stewardColumn = Number(Object.entries(headerRow).find(([, cell]) => (
+    cell.value.toLocaleLowerCase("cs-CZ").includes("sloupec")
+    && cell.value.toLocaleLowerCase("cs-CZ").includes("gestor")
+  ))?.[0]);
+  if (!Number.isFinite(stewardColumn)) return [];
+
+  const ignored = new Set(["všichni", "vsichni"]);
+  const stewards = rows.slice(headerRowIndex + 1)
+    .map((row) => row[stewardColumn]?.value?.trim() || "")
+    .filter((value) => value && !ignored.has(value.toLocaleLowerCase("cs-CZ")));
+  return [...new Set(stewards)];
+}
+
+export async function loadEditaceConfig(): Promise<EditaceConfig> {
   try {
     const url = `https://docs.google.com/spreadsheets/d/${appConfig.googleSheet.spreadsheetId}/export?format=xlsx`;
     const response = await fetch(url);
@@ -153,7 +179,8 @@ export async function loadStatusRules(): Promise<StatusRule[]> {
       && Object.values(row).some((cell) => cell.value === "Limit do")
       && Object.values(row).some((cell) => cell.value === "Podbarvení")
     ));
-    if (headerIndex < 0) return fallbackRules;
+    const stewards = parseStewards(parsedRows);
+    if (headerIndex < 0) return { statusRules: fallbackRules, stewards };
 
     const header = parsedRows[headerIndex];
     const limitFromCol = Number(Object.entries(header).find(([, cell]) => cell.value === "Limit od")?.[0]);
@@ -177,9 +204,13 @@ export async function loadStatusRules(): Promise<StatusRule[]> {
       })
       .filter((rule): rule is StatusRule => Boolean(rule));
 
-    return rules.length ? rules : fallbackRules;
+    return { statusRules: rules.length ? rules : fallbackRules, stewards };
   } catch (error) {
     console.warn(error instanceof Error ? error.message : error);
-    return fallbackRules;
+    return { statusRules: fallbackRules, stewards: [] };
   }
+}
+
+export async function loadStatusRules(): Promise<StatusRule[]> {
+  return (await loadEditaceConfig()).statusRules;
 }

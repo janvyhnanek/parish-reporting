@@ -1,7 +1,7 @@
 import { parse } from "csv-parse/sync";
 import type { DataRecord, FieldMetadata, MetadataCatalog, RecordValue, SemanticType, StatusRule } from "../shared/types";
 import { appConfig } from "./config";
-import { classifyTaskStatus, loadStatusRules } from "./statusRules";
+import { classifyTaskStatus, loadEditaceConfig } from "./statusRules";
 
 interface LoadedSheet {
   catalog: MetadataCatalog;
@@ -103,7 +103,7 @@ function normalizeValue(value: string, type: FieldMetadata["type"]): RecordValue
   return trimmed;
 }
 
-function buildCatalog(headers: string[], ids: string[], rows: string[][], loadedAt: string, statusRules: StatusRule[]): MetadataCatalog {
+function buildCatalog(headers: string[], ids: string[], rows: string[][], loadedAt: string, statusRules: StatusRule[], stewards: string[]): MetadataCatalog {
   const discoveredFields = headers.map((header, index) => {
     const values = rows.map((row) => row[index]?.trim() || "").filter(Boolean);
     const distinct = [...new Set(values)];
@@ -161,6 +161,7 @@ function buildCatalog(headers: string[], ids: string[], rows: string[][], loaded
       fields,
     },
     statusRules,
+    stewards,
   };
 }
 
@@ -176,12 +177,13 @@ async function fetchCsv(): Promise<string> {
 export async function loadSheet(force = false): Promise<LoadedSheet> {
   if (!force && cache && Date.now() - cache.loadedAt < appConfig.cacheMs) return cache.value;
 
-  const [csv, statusRules] = await Promise.all([fetchCsv(), loadStatusRules()]);
+  const [csv, editaceConfig] = await Promise.all([fetchCsv(), loadEditaceConfig()]);
+  const { statusRules, stewards } = editaceConfig;
   const rows = parse(csv, { bom: true, relax_column_count: true }) as string[][];
   const { headers, dataRows } = normalizeRows(rows);
   const ids = uniqueIds(headers);
   const loadedAt = new Date().toISOString();
-  const catalog = buildCatalog(headers, ids, dataRows, loadedAt, statusRules);
+  const catalog = buildCatalog(headers, ids, dataRows, loadedAt, statusRules, stewards);
   const fieldTypes = Object.fromEntries(catalog.entity.fields.map((field) => [field.id, field.type]));
   const primaryKey = catalog.entity.primaryKey;
   const records = dataRows.map((row, index) => {

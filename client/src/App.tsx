@@ -132,12 +132,28 @@ export function App() {
   }, [aggregation]);
 
   const stewardChartOption = useMemo(() => {
-    if (!stewardAggregation) return {};
+    if (!stewardAggregation || !metadata) return {};
     const sortedGroups = stewardAggregation.groups.filter((group) => group.label !== "Nevyplněno").sort((a, b) => {
       const delayedA = a.segments.find((item) => item.label === delayedStatusLabel)?.count || 0;
       const delayedB = b.segments.find((item) => item.label === delayedStatusLabel)?.count || 0;
       return delayedA - delayedB || b.total - a.total || a.label.localeCompare(b.label, "cs");
     });
+    const assignedStewards = new Set(sortedGroups.map((group) => group.label));
+    const emptyStewardGroups = metadata.stewards
+      .filter((steward) => !assignedStewards.has(steward))
+      .map((steward) => ({
+        key: steward,
+        label: steward,
+        total: 0,
+        segments: stewardAggregation.segmentLabels.map((segmentKey) => ({
+          key: segmentKey,
+          label: segmentKey,
+          count: 0,
+          recordIds: [],
+          color: stewardAggregation.segmentColors[segmentKey],
+        })),
+      }));
+    const rankedGroups = [...sortedGroups, ...emptyStewardGroups];
 
     return {
       color: stewardAggregation.segmentLabels.map((segmentKey, index) => stewardAggregation.segmentColors[segmentKey] || colorPalette[index % colorPalette.length]),
@@ -153,7 +169,7 @@ export function App() {
       yAxis: {
         type: "category",
         inverse: true,
-        data: sortedGroups.map((group) => group.label),
+        data: rankedGroups.map((group) => group.label),
         axisLabel: { color: "#334155", width: 132, overflow: "truncate" },
       },
       series: stewardAggregation.segmentLabels.map((segmentKey) => ({
@@ -162,13 +178,13 @@ export function App() {
         stack: "records",
         emphasis: { focus: "series" },
         itemStyle: { color: stewardAggregation.segmentColors[segmentKey] },
-        data: sortedGroups.map((group) => {
+        data: rankedGroups.map((group) => {
           const segmentItem = group.segments.find((item) => item.key === segmentKey);
           return { value: segmentItem?.count || 0, recordIds: segmentItem?.recordIds || [], groupLabel: group.label };
         }),
       })),
     };
-  }, [stewardAggregation]);
+  }, [metadata, stewardAggregation]);
 
   async function openDetails(recordIds?: string[], title = "Detail záznamů") {
     if (!metadata) return;

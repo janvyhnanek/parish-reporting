@@ -54,6 +54,7 @@ export interface MetadataCatalog {
     fields: FieldMetadata[];
   };
   statusRules: StatusRule[];
+  stewards: string[];
 }
 
 export type RecordValue = string | number | null;
