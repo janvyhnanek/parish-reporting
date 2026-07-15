@@ -1,10 +1,13 @@
 import ReactECharts from "echarts-for-react";
-import { Download, RefreshCw, Search, Settings2, Table2, X } from "lucide-react";
+import { Cloud, Download, Flame, RefreshCw, Search, Settings2, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AggregationResult, DashboardDefinition, DataRecord, FieldMetadata, FilterState, MetadataCatalog } from "../../shared/types";
 import { downloadCsv, fetchAggregation, fetchDashboards, fetchDetails, fetchMetadata, refreshMetadata } from "./api";
 
 const colorPalette = ["#2563eb", "#dc2626", "#f59e0b", "#16a34a", "#7c3aed", "#0891b2", "#be123c", "#4b5563"];
+const stewardFieldId = "gestor_vedouci_oddeleni_nebo_odboru";
+const taskStatusFieldId = "stav_ukolu";
+const delayedStatusLabel = "Po termínu";
 
 function fieldLabel(fields: FieldMetadata[], id: string): string {
   return fields.find((field) => field.id === id)?.label || id;
@@ -43,11 +46,13 @@ export function App() {
   const [dimension, setDimension] = useState("");
   const [segment, setSegment] = useState("");
   const [aggregation, setAggregation] = useState<AggregationResult | null>(null);
+  const [stewardAggregation, setStewardAggregation] = useState<AggregationResult | null>(null);
   const [selectedRecords, setSelectedRecords] = useState<DataRecord[]>([]);
   const [selectedTitle, setSelectedTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [aggregationError, setAggregationError] = useState<string | null>(null);
   const aggregationRequestId = useRef(0);
+  const stewardRequestId = useRef(0);
 
   const fields = metadata?.entity.fields || [];
   const visibleFields = fields.filter((field) => field.visible);
@@ -83,6 +88,22 @@ export function App() {
       });
   }, [metadata, dimension, segment, filters]);
 
+  useEffect(() => {
+    if (!metadata) return;
+    const requestId = stewardRequestId.current + 1;
+    stewardRequestId.current = requestId;
+    fetchAggregation({
+      entityId: metadata.entity.id,
+      dimensionFieldId: stewardFieldId,
+      segmentFieldId: taskStatusFieldId,
+      filters,
+    }).then((result) => {
+      if (stewardRequestId.current === requestId) setStewardAggregation(result);
+    }).catch(() => {
+      if (stewardRequestId.current === requestId) setStewardAggregation(null);
+    });
+  }, [metadata, filters]);
+
   const chartOption = useMemo(() => {
     if (!aggregation) return {};
     return {
@@ -109,6 +130,45 @@ export function App() {
       })),
     };
   }, [aggregation]);
+
+  const stewardChartOption = useMemo(() => {
+    if (!stewardAggregation) return {};
+    const sortedGroups = stewardAggregation.groups.filter((group) => group.label !== "Nevyplněno").sort((a, b) => {
+      const delayedA = a.segments.find((item) => item.label === delayedStatusLabel)?.count || 0;
+      const delayedB = b.segments.find((item) => item.label === delayedStatusLabel)?.count || 0;
+      return delayedA - delayedB || b.total - a.total || a.label.localeCompare(b.label, "cs");
+    });
+
+    return {
+      color: stewardAggregation.segmentLabels.map((segmentKey, index) => stewardAggregation.segmentColors[segmentKey] || colorPalette[index % colorPalette.length]),
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+      legend: { type: "scroll", top: 0, textStyle: { color: "#334155" } },
+      grid: { top: 52, left: 150, right: 36, bottom: 24 },
+      xAxis: {
+        type: "value",
+        minInterval: 1,
+        axisLabel: { color: "#475569" },
+        splitLine: { lineStyle: { color: "#e2e8f0" } },
+      },
+      yAxis: {
+        type: "category",
+        inverse: true,
+        data: sortedGroups.map((group) => group.label),
+        axisLabel: { color: "#334155", width: 132, overflow: "truncate" },
+      },
+      series: stewardAggregation.segmentLabels.map((segmentKey) => ({
+        name: segmentKey,
+        type: "bar",
+        stack: "records",
+        emphasis: { focus: "series" },
+        itemStyle: { color: stewardAggregation.segmentColors[segmentKey] },
+        data: sortedGroups.map((group) => {
+          const segmentItem = group.segments.find((item) => item.key === segmentKey);
+          return { value: segmentItem?.count || 0, recordIds: segmentItem?.recordIds || [], groupLabel: group.label };
+        }),
+      })),
+    };
+  }, [stewardAggregation]);
 
   async function openDetails(recordIds?: string[], title = "Detail záznamů") {
     if (!metadata) return;
@@ -190,6 +250,29 @@ export function App() {
           <div><span>Po filtru</span><strong>{aggregation?.filteredRecords ?? "…"}</strong></div>
           <div><span>Sloupců</span><strong>{fields.length}</strong></div>
           <div><span>Aktivních filtrů</span><strong>{selectedFilterCount(filters)}</strong></div>
+        </section>
+
+        <section className="guardian-panel">
+          <div className="realm-label realm-label-top"><Cloud size={18} />Nebe: nejméně zpožděných úkolů</div>
+          <div className="realm-label realm-label-bottom"><Flame size={18} />Peklo: nejvíce zpožděných úkolů</div>
+          <div className="section-heading">
+            <div>
+              <h2>Žebříček gestorů podle zpožděných úkolů</h2>
+              <p>Nahoře jsou gestoři s nejméně úkoly po termínu. Při shodě je výše ten, kdo má více přidělených úkolů celkem.</p>
+            </div>
+          </div>
+          <ReactECharts
+            key={`stewards:${selectedFilterCount(filters)}`}
+            className="heaven-hell-chart"
+            option={stewardChartOption}
+            notMerge
+            onEvents={{
+              click: (params: { data?: { recordIds?: string[]; groupLabel?: string }; seriesName?: string }) => {
+                const ids = params.data?.recordIds || [];
+                if (ids.length) openDetails(ids, `${params.data?.groupLabel || "Gestor"} / ${params.seriesName || "stav"}`);
+              },
+            }}
+          />
         </section>
 
         <section className="toolbar">

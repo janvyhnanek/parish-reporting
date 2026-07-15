@@ -15,11 +15,20 @@ if [[ ! -f "${APP_DIR}/dist/client/index.html" ]]; then
   npm run build
 fi
 
-if ! ss -ltn | grep -q ":${PORT} "; then
-  NODE_ENV=production PORT="${PORT}" nohup npm start >"${LOG_FILE}" 2>&1 &
-  echo $! >"${PID_FILE}"
-  sleep 2
+if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+  kill "$(cat "${PID_FILE}")"
+  sleep 1
 fi
+
+if ss -ltnp | grep -q ":${PORT} "; then
+  ss -ltnp | grep ":${PORT} " >&2
+  echo "Port ${PORT} is already in use by another process." >&2
+  exit 1
+fi
+
+setsid -f env NODE_ENV=production PORT="${PORT}" node --import tsx server/index.ts >"${LOG_FILE}" 2>&1
+sleep 2
+pgrep -f "node --import tsx server/index.ts" | tail -n 1 >"${PID_FILE}"
 
 curl -fsS http://127.0.0.1:2019/config/ > /tmp/caddy-current.json
 

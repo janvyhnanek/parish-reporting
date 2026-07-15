@@ -108,8 +108,7 @@ export async function aggregate(request: AggregationRequest): Promise<Aggregatio
         };
       }),
     }))
-    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "cs"))
-    .slice(0, 30);
+    .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, "cs"));
 
   return {
     dimensionFieldId: request.dimensionFieldId,
@@ -119,7 +118,7 @@ export async function aggregate(request: AggregationRequest): Promise<Aggregatio
     segmentColors,
     totalRecords: records.length,
     filteredRecords: filtered.length,
-    diagnostics: resultGroups.length > 30 ? ["Výsledek je omezen na 30 největších skupin."] : [],
+    diagnostics: [],
   };
 }
 

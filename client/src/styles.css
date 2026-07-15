@@ -227,6 +227,7 @@ input {
 
 .kpi-grid div,
 .chart-panel,
+.guardian-panel,
 .metadata-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -277,8 +278,60 @@ input {
 }
 
 .chart-panel,
+.guardian-panel,
 .metadata-panel {
   padding: 1rem;
+}
+
+.guardian-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(219, 234, 254, 0.9) 0%, rgba(255, 255, 255, 0.95) 45%, rgba(254, 226, 226, 0.92) 100%),
+    var(--panel);
+}
+
+.guardian-panel::before {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(circle at 12% 13%, rgba(255, 255, 255, 0.95) 0 24px, transparent 25px),
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.82) 0 18px, transparent 19px),
+    radial-gradient(circle at 74% 88%, rgba(239, 68, 68, 0.3) 0 34px, transparent 35px),
+    radial-gradient(circle at 87% 92%, rgba(249, 115, 22, 0.26) 0 28px, transparent 29px);
+  opacity: 0.78;
+}
+
+.guardian-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.realm-label {
+  position: absolute;
+  right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.55rem;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(6px);
+}
+
+.realm-label-top {
+  top: 0.85rem;
+  color: #1d4ed8;
+}
+
+.realm-label-bottom {
+  bottom: 0.85rem;
+  color: #b91c1c;
 }
 
 .section-heading {
@@ -303,6 +356,11 @@ input {
 .chart {
   height: min(58vh, 520px);
   min-height: 360px;
+}
+
+.heaven-hell-chart {
+  height: min(68vh, 660px);
+  min-height: 420px;
 }
 
 .field-grid {
@@ -453,5 +511,15 @@ th {
 
   .chart {
     min-height: 320px;
+  }
+
+  .heaven-hell-chart {
+    min-height: 380px;
+  }
+
+  .realm-label {
+    position: static;
+    width: fit-content;
+    margin-bottom: 0.45rem;
   }
 }
