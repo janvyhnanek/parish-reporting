@@ -1,5 +1,5 @@
 import ReactECharts from "echarts-for-react";
-import { Cloud, Download, Flame, RefreshCw, Search, Settings2, Table2, X } from "lucide-react";
+import { Cloud, Download, Flame, RefreshCw, Search, SlidersHorizontal, Settings2, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AggregationResult, DashboardDefinition, DataRecord, FieldMetadata, FilterState, MetadataCatalog } from "../../shared/types";
 import { downloadCsv, fetchAggregation, fetchDashboards, fetchDetails, fetchMetadata, refreshMetadata } from "./api";
@@ -51,6 +51,7 @@ export function App() {
   const [selectedTitle, setSelectedTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [aggregationError, setAggregationError] = useState<string | null>(null);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const aggregationRequestId = useRef(0);
   const stewardRequestId = useRef(0);
 
@@ -58,6 +59,7 @@ export function App() {
   const visibleFields = fields.filter((field) => field.visible);
   const dimensionFields = fields.filter((field) => field.dimension);
   const filterFields = fields.filter((field) => field.filterable && field.sampleValues.length);
+  const activeFilterCount = selectedFilterCount(filters);
 
   useEffect(() => {
     if (!metadata || !dashboard) return;
@@ -215,37 +217,51 @@ export function App() {
           </div>
         </div>
 
-        <div className="filter-search">
-          <Search size={16} />
-          <input
-            value={filters.query || ""}
-            onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
-            placeholder="Hledat v úkolech"
-          />
-        </div>
-
-        <div className="panel-title">
-          <Settings2 size={16} />
+        <button
+          className="mobile-filter-toggle"
+          type="button"
+          aria-expanded={mobileFiltersOpen}
+          aria-controls="filter-panel"
+          onClick={() => setMobileFiltersOpen((open) => !open)}
+        >
+          <SlidersHorizontal size={16} />
           <span>Filtry</span>
-          <button type="button" onClick={() => setFilters(emptyFilter())}>Vymazat</button>
-        </div>
+          {activeFilterCount ? <strong>{activeFilterCount}</strong> : null}
+        </button>
 
-        <div className="filter-list">
-          {filterFields.map((field) => (
-            <label key={field.id} className="filter-field">
-              <span>{field.label}</span>
-              <select
-                multiple
-                value={filters.fields?.[field.id] || []}
-                onChange={(event) => {
-                  const values = Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
-                  setFilters((current) => ({ ...current, fields: { ...(current.fields || {}), [field.id]: values } }));
-                }}
-              >
-                {field.sampleValues.map((value) => <option key={value} value={value}>{value}</option>)}
-              </select>
-            </label>
-          ))}
+        <div id="filter-panel" className={`filter-panel${mobileFiltersOpen ? " is-open" : ""}`}>
+          <div className="filter-search">
+            <Search size={16} />
+            <input
+              value={filters.query || ""}
+              onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+              placeholder="Hledat v úkolech"
+            />
+          </div>
+
+          <div className="panel-title">
+            <Settings2 size={16} />
+            <span>Filtry</span>
+            <button type="button" onClick={() => setFilters(emptyFilter())}>Vymazat</button>
+          </div>
+
+          <div className="filter-list">
+            {filterFields.map((field) => (
+              <label key={field.id} className="filter-field">
+                <span>{field.label}</span>
+                <select
+                  multiple
+                  value={filters.fields?.[field.id] || []}
+                  onChange={(event) => {
+                    const values = Array.from(event.currentTarget.selectedOptions).map((option) => option.value);
+                    setFilters((current) => ({ ...current, fields: { ...(current.fields || {}), [field.id]: values } }));
+                  }}
+                >
+                  {field.sampleValues.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
         </div>
       </aside>
 
@@ -265,7 +281,7 @@ export function App() {
           <div><span>Řádků ve zdroji</span><strong>{metadata.source.rowCount}</strong></div>
           <div><span>Po filtru</span><strong>{aggregation?.filteredRecords ?? "…"}</strong></div>
           <div><span>Sloupců</span><strong>{fields.length}</strong></div>
-          <div><span>Aktivních filtrů</span><strong>{selectedFilterCount(filters)}</strong></div>
+          <div><span>Aktivních filtrů</span><strong>{activeFilterCount}</strong></div>
         </section>
 
         <section className="guardian-panel">
@@ -278,7 +294,7 @@ export function App() {
             </div>
           </div>
           <ReactECharts
-            key={`stewards:${selectedFilterCount(filters)}`}
+            key={`stewards:${activeFilterCount}`}
             className="heaven-hell-chart"
             option={stewardChartOption}
             notMerge
