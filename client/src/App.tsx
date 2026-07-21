@@ -1,5 +1,5 @@
 import ReactECharts from "echarts-for-react";
-import { Cloud, Download, Flame, RefreshCw, Search, SlidersHorizontal, Settings2, Table2, X } from "lucide-react";
+import { ChevronDown, Cloud, Download, Flame, RefreshCw, Search, SlidersHorizontal, Settings2, Table2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AggregationResult, DashboardDefinition, DataRecord, FieldMetadata, FilterState, MetadataCatalog } from "../../shared/types";
 import { downloadCsv, fetchAggregation, fetchDashboards, fetchDetails, fetchMetadata, refreshMetadata } from "./api";
@@ -52,6 +52,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [aggregationError, setAggregationError] = useState<string | null>(null);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [dataOverviewOpen, setDataOverviewOpen] = useState(false);
   const aggregationRequestId = useRef(0);
   const stewardRequestId = useRef(0);
 
@@ -277,11 +278,57 @@ export function App() {
           </div>
         </header>
 
-        <section className="kpi-grid">
-          <div><span>Řádků ve zdroji</span><strong>{metadata.source.rowCount}</strong></div>
-          <div><span>Po filtru</span><strong>{aggregation?.filteredRecords ?? "…"}</strong></div>
-          <div><span>Sloupců</span><strong>{fields.length}</strong></div>
-          <div><span>Aktivních filtrů</span><strong>{activeFilterCount}</strong></div>
+        <section className={`data-overview${dataOverviewOpen ? " is-open" : ""}`}>
+          <button
+            className="data-overview-toggle"
+            type="button"
+            aria-expanded={dataOverviewOpen}
+            aria-controls="data-overview-panel"
+            onClick={() => setDataOverviewOpen((open) => !open)}
+          >
+            <span>Přehled úkolů</span>
+            <small>{aggregation?.filteredRecords ?? "…"} z {metadata.source.rowCount} řádků</small>
+            <ChevronDown size={18} />
+          </button>
+
+          <div id="data-overview-panel" className="data-overview-panel">
+            <div className="kpi-grid">
+              <div><span>Řádků ve zdroji</span><strong>{metadata.source.rowCount}</strong></div>
+              <div><span>Po filtru</span><strong>{aggregation?.filteredRecords ?? "…"}</strong></div>
+              <div><span>Sloupců</span><strong>{fields.length}</strong></div>
+              <div><span>Aktivních filtrů</span><strong>{activeFilterCount}</strong></div>
+            </div>
+
+            <div className="metadata-panel">
+              <div className="section-heading">
+                <div>
+                  <h2>Datový katalog</h2>
+                  <p>Automaticky odvozená metadata z listu {metadata.source.worksheetName}.</p>
+                </div>
+              </div>
+              <div className="status-rule-list" aria-label="Pravidla stavů úkolů">
+                {metadata.statusRules.map((rule) => (
+                  <span
+                    key={rule.id}
+                    className="status-rule-chip"
+                    style={{ backgroundColor: rule.color, color: rule.textColor }}
+                  >
+                    {rule.label}
+                    <small>{rule.completed ? "splněno" : `${rule.from ?? "−∞"} až ${rule.to ?? "+∞"}`}</small>
+                  </span>
+                ))}
+              </div>
+              <div className="field-grid">
+                {fields.map((field) => (
+                  <div className="field-card" key={field.id}>
+                    <strong>{field.label}</strong>
+                    <span>{field.type} / {field.semanticType}</span>
+                    <small>{field.distinctCount} hodnot, {Math.round(field.completeness * 100)} % vyplněno</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="guardian-panel">
@@ -351,35 +398,6 @@ export function App() {
           />
         </section>
 
-        <section className="metadata-panel">
-          <div className="section-heading">
-            <div>
-              <h2>Datový katalog</h2>
-              <p>Automaticky odvozená metadata z listu {metadata.source.worksheetName}.</p>
-            </div>
-          </div>
-          <div className="status-rule-list" aria-label="Pravidla stavů úkolů">
-            {metadata.statusRules.map((rule) => (
-              <span
-                key={rule.id}
-                className="status-rule-chip"
-                style={{ backgroundColor: rule.color, color: rule.textColor }}
-              >
-                {rule.label}
-                <small>{rule.completed ? "splněno" : `${rule.from ?? "−∞"} až ${rule.to ?? "+∞"}`}</small>
-              </span>
-            ))}
-          </div>
-          <div className="field-grid">
-            {fields.map((field) => (
-              <div className="field-card" key={field.id}>
-                <strong>{field.label}</strong>
-                <span>{field.type} / {field.semanticType}</span>
-                <small>{field.distinctCount} hodnot, {Math.round(field.completeness * 100)} % vyplněno</small>
-              </div>
-            ))}
-          </div>
-        </section>
       </main>
 
       {selectedRecords.length ? (
