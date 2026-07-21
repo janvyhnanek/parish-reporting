@@ -198,25 +198,6 @@ input {
   padding: 1.15rem;
 }
 
-.topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.1rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-
-.topbar h1 {
-  margin: 0;
-  font-size: clamp(1.45rem, 2.5vw, 2rem);
-  line-height: 1.1;
-}
-
-.topbar p,
 .section-heading p {
   margin: 0.35rem 0 0;
   color: var(--muted);
@@ -601,7 +582,6 @@ th {
 }
 
 @media (max-width: 680px) {
-  .topbar,
   .section-heading {
     display: grid;
   }

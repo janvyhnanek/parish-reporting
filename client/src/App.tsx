@@ -267,13 +267,6 @@ export function App() {
       </aside>
 
       <main className="workspace">
-        <header className="topbar">
-          <div>
-            <h1>{dashboard.title}</h1>
-            <p>{dashboard.description}</p>
-          </div>
-        </header>
-
         <section className={`data-overview${dataOverviewOpen ? " is-open" : ""}`}>
           <button
             className="data-overview-toggle"
