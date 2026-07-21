@@ -222,12 +222,6 @@ input {
   color: var(--muted);
 }
 
-.topbar-actions {
-  display: flex;
-  gap: 0.55rem;
-  white-space: nowrap;
-}
-
 .data-overview {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -286,6 +280,12 @@ input {
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.data-overview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .kpi-grid {
@@ -602,7 +602,6 @@ th {
 
 @media (max-width: 680px) {
   .topbar,
-  .topbar-actions,
   .section-heading {
     display: grid;
   }

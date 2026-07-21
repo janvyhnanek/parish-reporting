@@ -272,10 +272,6 @@ export function App() {
             <h1>{dashboard.title}</h1>
             <p>{dashboard.description}</p>
           </div>
-          <div className="topbar-actions">
-            <button type="button" onClick={refreshSource} disabled={busy}><RefreshCw size={16} />Obnovit zdroj</button>
-            <button type="button" onClick={() => downloadCsv({ entityId: metadata.entity.id, filters })}><Download size={16} />CSV</button>
-          </div>
         </header>
 
         <section className={`data-overview${dataOverviewOpen ? " is-open" : ""}`}>
@@ -292,6 +288,11 @@ export function App() {
           </button>
 
           <div id="data-overview-panel" className="data-overview-panel">
+            <div className="data-overview-actions">
+              <button type="button" onClick={refreshSource} disabled={busy}><RefreshCw size={16} />Obnovit zdroj</button>
+              <button type="button" onClick={() => downloadCsv({ entityId: metadata.entity.id, filters })}><Download size={16} />CSV</button>
+            </div>
+
             <div className="kpi-grid">
               <div><span>Řádků ve zdroji</span><strong>{metadata.source.rowCount}</strong></div>
               <div><span>Po filtru</span><strong>{aggregation?.filteredRecords ?? "…"}</strong></div>
