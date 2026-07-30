@@ -30,7 +30,16 @@ setsid -f env NODE_ENV=production PORT="${PORT}" node --import tsx server/index.
 sleep 2
 pgrep -f "node --import tsx server/index.ts" | tail -n 1 >"${PID_FILE}"
 
-curl -fsS http://127.0.0.1:2019/config/ > /tmp/caddy-current.json
+for attempt in {1..60}; do
+  if curl -fsS http://127.0.0.1:2019/config/ > /tmp/caddy-current.json; then
+    break
+  fi
+  if [[ "${attempt}" == "60" ]]; then
+    echo "Caddy admin API is not available." >&2
+    exit 1
+  fi
+  sleep 2
+done
 
 node - <<'NODE'
 const fs = require("fs");
@@ -93,5 +102,6 @@ curl -fsS -X POST http://127.0.0.1:2019/load \
 
 curl -fsSI "https://${DOMAIN}" >/dev/null
 curl -fsS "https://${DOMAIN}/api/metadata" >/dev/null
+curl -fsS --resolve "${DOMAIN}:443:127.0.0.1" "https://${DOMAIN}/api/metadata" >/dev/null
 
 echo "Vizitator deployed on https://${DOMAIN}"
