@@ -8,6 +8,16 @@ interface EditaceConfig {
   stewards: string[];
 }
 
+const completedRule: StatusRule = {
+  id: "splneno",
+  label: "SPLNĚNO",
+  from: null,
+  to: null,
+  color: "#093d93",
+  textColor: "#ffffff",
+  completed: true,
+};
+
 const parser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "",
@@ -19,7 +29,7 @@ const fallbackRules: StatusRule[] = [
   { id: "akutni_termin", label: "Akutní termín", from: 0, to: 2, color: "#ffc7ce", textColor: "#9c0006", completed: false },
   { id: "blizici_se_termin", label: "Blížící se termín", from: 3, to: 6, color: "#ffeb9c", textColor: "#9c6500", completed: false },
   { id: "vzdaleny_termin", label: "Vzdálený termín", from: 7, to: null, color: "#c6efce", textColor: "#006100", completed: false },
-  { id: "splneno", label: "SPLNĚNO", from: null, to: null, color: "#093d93", textColor: "#ffffff", completed: true },
+  completedRule,
 ];
 
 function asArray<T>(value: T | T[] | undefined): T[] {
@@ -113,8 +123,7 @@ async function loadStyleLookups(zip: JSZip) {
 
 export function classifyTaskStatus(value: unknown, rules: StatusRule[]): StatusRule {
   const text = value == null ? "" : String(value).trim();
-  const completedRule = rules.find((rule) => rule.completed);
-  if (text.toLocaleUpperCase("cs-CZ").includes("SPLNĚNO")) return completedRule || fallbackRules[4];
+  if (text.toLocaleUpperCase("cs-CZ").includes("SPLNĚNO")) return rules.find((rule) => rule.completed) || completedRule;
 
   const numeric = Number(text.replace(",", "."));
   if (!Number.isNaN(numeric)) {
@@ -125,6 +134,13 @@ export function classifyTaskStatus(value: unknown, rules: StatusRule[]): StatusR
   }
 
   return rules.find((rule) => !rule.completed && rule.from === null) || fallbackRules[0];
+}
+
+function normalizeStatusRules(rules: StatusRule[]): StatusRule[] {
+  return [
+    ...rules.filter((rule) => !rule.completed),
+    completedRule,
+  ];
 }
 
 function parseStewards(rows: Record<number, { value: string }>[]): string[] {
@@ -204,7 +220,7 @@ export async function loadEditaceConfig(): Promise<EditaceConfig> {
       })
       .filter((rule): rule is StatusRule => Boolean(rule));
 
-    return { statusRules: rules.length ? rules : fallbackRules, stewards };
+    return { statusRules: rules.length ? normalizeStatusRules(rules) : fallbackRules, stewards };
   } catch (error) {
     console.warn(error instanceof Error ? error.message : error);
     return { statusRules: fallbackRules, stewards: [] };
