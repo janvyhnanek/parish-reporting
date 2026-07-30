@@ -166,12 +166,17 @@ function buildCatalog(headers: string[], ids: string[], rows: string[][], loaded
 }
 
 async function fetchCsv(): Promise<string> {
-  const url = `https://docs.google.com/spreadsheets/d/${appConfig.googleSheet.spreadsheetId}/export?format=csv&gid=${appConfig.googleSheet.gid}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Google Sheets export failed: ${response.status} ${response.statusText}`);
+  const urls = [
+    `https://docs.google.com/spreadsheets/d/${appConfig.googleSheet.spreadsheetId}/export?format=csv&gid=${appConfig.googleSheet.gid}`,
+    `https://docs.google.com/spreadsheets/d/${appConfig.googleSheet.spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(appConfig.googleSheet.worksheetName)}`,
+  ];
+  let lastError = "";
+  for (const url of urls) {
+    const response = await fetch(url);
+    if (response.ok) return response.text();
+    lastError = `${response.status} ${response.statusText}`;
   }
-  return response.text();
+  throw new Error(`Google Sheets export failed: ${lastError}`);
 }
 
 export async function loadSheet(force = false): Promise<LoadedSheet> {
