@@ -125,7 +125,7 @@ export function classifyTaskStatus(value: unknown, rules: StatusRule[]): StatusR
   const text = value == null ? "" : String(value).trim();
   if (text.toLocaleUpperCase("cs-CZ").includes("SPLNĚNO")) return rules.find((rule) => rule.completed) || completedRule;
 
-  const numeric = Number(text.replace(",", "."));
+  const numeric = text ? Number(text.replace(",", ".")) : Number.NaN;
   if (!Number.isNaN(numeric)) {
     const match = rules.find((rule) => !rule.completed
       && (rule.from === null || numeric >= rule.from)

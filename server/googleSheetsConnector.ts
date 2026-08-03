@@ -1,4 +1,6 @@
 import { parse } from "csv-parse/sync";
+import JSZip from "jszip";
+import { XMLParser } from "fast-xml-parser";
 import type { DataRecord, FieldMetadata, MetadataCatalog, RecordValue, SemanticType, StatusRule } from "../shared/types";
 import { appConfig } from "./config";
 import { classifyTaskStatus, loadEditaceConfig } from "./statusRules";
@@ -8,7 +10,23 @@ interface LoadedSheet {
   records: DataRecord[];
 }
 
+interface XlsxCell {
+  value: string;
+  formula: boolean;
+}
+
 let cache: { loadedAt: number; value: LoadedSheet } | null = null;
+
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "",
+  textNodeName: "#text",
+});
+
+function asArray<T>(value: T | T[] | undefined): T[] {
+  if (value === undefined) return [];
+  return Array.isArray(value) ? value : [value];
+}
 
 function slugify(value: string): string {
   const slug = value
@@ -59,6 +77,51 @@ function normalizeRows(rows: string[][]): { headers: string[]; dataRows: string[
     .filter((row) => row.some((cell) => cell?.trim()))
     .filter((row) => taskColumnIndex < 0 || Boolean(row[taskColumnIndex]?.trim()));
   return { headers, dataRows };
+}
+
+function collectText(node: unknown): string {
+  if (node == null) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(collectText).join("");
+  if (typeof node === "object") {
+    const record = node as Record<string, unknown>;
+    return Object.entries(record)
+      .filter(([key]) => !["r", "s", "xml:space"].includes(key))
+      .map(([, value]) => collectText(value))
+      .join("");
+  }
+  return "";
+}
+
+function cellColumn(cellRef: string): number {
+  const letters = cellRef.match(/[A-Z]+/)?.[0] || "A";
+  return [...letters].reduce((sum, char) => sum * 26 + char.charCodeAt(0) - 64, 0);
+}
+
+function cellValue(cell: Record<string, unknown>, sharedStrings: string[]): string {
+  const raw = cell.v;
+  if (raw === undefined || raw === null) return "";
+  const value = typeof raw === "object" ? collectText(raw) : String(raw);
+  if (cell.t === "s") return sharedStrings[Number(value)] || "";
+  return value;
+}
+
+async function loadSharedStrings(zip: JSZip): Promise<string[]> {
+  const file = zip.file("xl/sharedStrings.xml");
+  if (!file) return [];
+  const root = parser.parse(await file.async("text"));
+  return asArray(root.sst?.si).map(collectText);
+}
+
+async function loadWorkbookSheetPath(zip: JSZip, sheetName: string): Promise<string> {
+  const workbook = parser.parse(await zip.file("xl/workbook.xml")!.async("text"));
+  const rels = parser.parse(await zip.file("xl/_rels/workbook.xml.rels")!.async("text"));
+  const relMap = new Map(asArray(rels.Relationships?.Relationship).map((rel: Record<string, string>) => [rel.Id, rel.Target]));
+  const sheet = asArray(workbook.workbook?.sheets?.sheet).find((item: Record<string, string>) => item.name === sheetName) as Record<string, string> | undefined;
+  if (!sheet) throw new Error(`Worksheet ${sheetName} not found`);
+  const target = relMap.get(sheet["r:id"]);
+  if (!target) throw new Error(`Worksheet relationship for ${sheetName} not found`);
+  return target.startsWith("xl/") ? target : `xl/${target}`;
 }
 
 function inferType(values: string[]): FieldMetadata["type"] {
@@ -179,12 +242,72 @@ async function fetchCsv(): Promise<string> {
   throw new Error(`Google Sheets export failed: ${lastError}`);
 }
 
+async function fetchFormulaRows(): Promise<XlsxCell[][]> {
+  const url = `https://docs.google.com/spreadsheets/d/${appConfig.googleSheet.spreadsheetId}/export?format=xlsx`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Google Sheets XLSX export failed: ${response.status} ${response.statusText}`);
+  const zip = await JSZip.loadAsync(await response.arrayBuffer());
+  const [sharedStrings, sheetPath] = await Promise.all([
+    loadSharedStrings(zip),
+    loadWorkbookSheetPath(zip, appConfig.googleSheet.worksheetName),
+  ]);
+  const sheet = parser.parse(await zip.file(sheetPath)!.async("text"));
+  const rows = asArray(sheet.worksheet?.sheetData?.row);
+  return rows.map((row: Record<string, unknown>) => {
+    const parsedRow: XlsxCell[] = [];
+    asArray(row.c as Record<string, unknown> | Record<string, unknown>[]).forEach((cell) => {
+      parsedRow[cellColumn(String(cell.r || "A")) - 1] = {
+        value: cellValue(cell, sharedStrings).trim(),
+        formula: Boolean(cell.f),
+      };
+    });
+    return parsedRow;
+  });
+}
+
+function overlayFormulaValues(csvRows: string[][], xlsxRows: XlsxCell[][]): string[][] {
+  const xlsxTextRows = xlsxRows.map((row) => row.map((cell) => cell?.value || ""));
+  const csvHeaderIndex = findHeaderRow(csvRows);
+  const xlsxHeaderIndex = findHeaderRow(xlsxTextRows);
+  const csvHeaders = trimEmptyEdges(csvRows[csvHeaderIndex] || []);
+  const xlsxHeaders = trimEmptyEdges(xlsxTextRows[xlsxHeaderIndex] || []);
+  const csvFirstHeaderColumn = csvRows[csvHeaderIndex]?.findIndex((cell) => (cell || "").trim() === csvHeaders[0]) ?? 0;
+  const xlsxFirstHeaderColumn = xlsxTextRows[xlsxHeaderIndex]?.findIndex((cell) => (cell || "").trim() === xlsxHeaders[0]) ?? 0;
+  const csvColumnsById = new Map(csvHeaders.map((header, index) => [slugify(header), csvFirstHeaderColumn + index]));
+  const formulaColumns = xlsxHeaders
+    .map((header, index) => ({ id: slugify(header), xlsxColumn: xlsxFirstHeaderColumn + index }))
+    .filter(({ id, xlsxColumn }) => csvColumnsById.has(id) && xlsxRows.slice(xlsxHeaderIndex + 1).some((row) => row[xlsxColumn]?.formula));
+
+  return csvRows.map((sourceRow, rowIndex) => {
+    const row = [...sourceRow];
+    const dataOffset = rowIndex - csvHeaderIndex - 1;
+    if (dataOffset < 0) return row;
+    const xlsxRow = xlsxRows[xlsxHeaderIndex + 1 + dataOffset];
+    if (!xlsxRow) return row;
+    formulaColumns.forEach(({ id, xlsxColumn }) => {
+      const csvColumn = csvColumnsById.get(id);
+      const cell = xlsxRow[xlsxColumn];
+      if (csvColumn !== undefined && cell?.formula) row[csvColumn] = cell.value;
+    });
+    return row;
+  });
+}
+
+async function fetchRows(): Promise<string[][]> {
+  const csvRows = parse(await fetchCsv(), { bom: true, relax_column_count: true }) as string[][];
+  try {
+    return overlayFormulaValues(csvRows, await fetchFormulaRows());
+  } catch (error) {
+    console.warn(error instanceof Error ? error.message : error);
+    return csvRows;
+  }
+}
+
 export async function loadSheet(force = false): Promise<LoadedSheet> {
   if (!force && cache && Date.now() - cache.loadedAt < appConfig.cacheMs) return cache.value;
 
-  const [csv, editaceConfig] = await Promise.all([fetchCsv(), loadEditaceConfig()]);
+  const [rows, editaceConfig] = await Promise.all([fetchRows(), loadEditaceConfig()]);
   const { statusRules, stewards } = editaceConfig;
-  const rows = parse(csv, { bom: true, relax_column_count: true }) as string[][];
   const { headers, dataRows } = normalizeRows(rows);
   const ids = uniqueIds(headers);
   const loadedAt = new Date().toISOString();
